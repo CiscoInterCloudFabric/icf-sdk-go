@@ -10,7 +10,6 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
-	//"net/url"
 	"path"
 	"time"
 )
@@ -81,19 +80,23 @@ func NewSession(client *Client, life time.Duration) (session *Session, err error
 	}
 
 	if client.config.ServerCert != "" {
+		//log.Printf("[Info] New Session with Sever Cert\n")
 		roots := x509.NewCertPool()
 		ok := roots.AppendCertsFromPEM([]byte(client.config.ServerCert))
 		if !ok {
-			log.Printf("[Error] Invalid Server Cert\n", err)
+			log.Printf("[Error] Invalid Server Cert %v\n", err)
 			err = fmt.Errorf("Invalid Server Cert")
 			return
 		}
 
 		session.hclient.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{
-				RootCAs: roots,
+				InsecureSkipVerify: true,
+				RootCAs:            roots,
 			},
 		}
+	} else {
+		log.Printf("[Info] New Session with No Sever Cert\n")
 	}
 
 	/*
@@ -178,11 +181,11 @@ func (s *Session) Close() (err error) {
 }
 
 const (
-	StatusInProgress       = "In_Progress"
-	StatusCreateInProgress = "Create_In_Progress"
-	StatusDeleteInProgress = "Delete_In_Progress"
-	StatusSuccess          = "Success"
-	StatusDeleted          = "Deleted"
+	StatusInProgress       = "progress"
+	StatusCreateInProgress = "creating"
+	StatusDeleteInProgress = "deleting"
+	StatusSuccess          = "success"
+	StatusDeleted          = "deleted"
 )
 
 type InstanceNicInfo struct {
@@ -223,6 +226,10 @@ type refObjInfo struct {
 	Properties refObjProperties `json:"properties"`
 }
 
+type objectStatus struct {
+	Status string `json:"status"`
+}
+
 type instanceProperties struct {
 	Name           string               `json:"name,omitempty"`
 	Oid            string               `json:"oid"`
@@ -231,7 +238,7 @@ type instanceProperties struct {
 	Resources      instanceResourceInfo `json:"resource_information"`
 	VdcInfo        refObjInfo           `json:"vdc_summary"`
 	CatalogInfo    refObjInfo           `json:"catalog_item_summary"`
-	Status         string               `json:"status"`
+	Status         objectStatus         `json:"object_status"`
 }
 
 type instanceValue struct {
@@ -315,7 +322,7 @@ func instancePropertiesToValue(resp instanceProperties) (inst *Instance, err err
 		Catalog:        resp.CatalogInfo.Properties.Oid,
 		PublicIp:       resp.Oper.ProviderIP.Public,
 		PrivateIp:      resp.Oper.ProviderIP.Private,
-		Status:         resp.Status,
+		Status:         resp.Status.Status,
 	}
 	inst.Nics = make([]InstanceNicInfo, len(resp.Resources.Network.Nics))
 	copy(inst.Nics, resp.Resources.Network.Nics)
@@ -347,7 +354,7 @@ func (c *Client) do(oper uint, object string, reqData []byte) (rspData []byte, e
 		if session != nil {
 			session.Close()
 		}
-		log.Printf("Error creating new session : Error = (%v)\n", err)
+		log.Printf("[Error] creating new session : Error = (%v)\n", err)
 		return
 	}
 	defer func() {
@@ -385,7 +392,7 @@ func (c *Client) GetInstance(oid string) (instance *Instance, err error) {
 
 	data, err = c.do(read, "instances"+"/"+oid, nil)
 	if err != nil {
-		log.Printf("Error reading instance (%s): Error = (%v)\n", oid, err)
+		log.Printf("[Error] reading instance (%s): Error = (%v)\n", oid, err)
 		return
 	}
 	if err = json.Unmarshal(data, &resp); err != nil {
@@ -404,7 +411,7 @@ func (c *Client) GetInstances() (instances []*Instance, err error) {
 
 	data, err = c.do(read, "instances", nil)
 	if err != nil {
-		log.Printf("Error reading all instances : Error = (%v)\n", err)
+		log.Printf("[Error] reading all instances : Error = (%v)\n", err)
 		return
 	}
 	if err = json.Unmarshal(data, &resp); err != nil {
@@ -441,7 +448,7 @@ func (c *Client) CreateInstance(instance *Instance) (newInstance *Instance, err 
 	}
 	rspData, err = c.do(create, "instances", reqData)
 	if err != nil {
-		log.Printf("Error Creating instance (%v) : Error = (%v)\n",
+		log.Printf("[Error] Creating instance (%v) : Error = (%v)\n",
 			instance, err)
 		return
 	}
@@ -467,7 +474,7 @@ func (c *Client) DeleteInstance(oid string) (err error) {
 
 	data, err = c.do(remove, "instances"+"/"+oid, nil)
 	if err != nil {
-		log.Printf("Error Deleting instance (%s) : Error = (%v)\n",
+		log.Printf("[Error] Deleting instance (%s) : Error = (%v)\n",
 			oid, err)
 		return
 	}
