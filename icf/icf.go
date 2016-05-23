@@ -2,13 +2,15 @@ package icf
 
 import (
 	"bytes"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"math/rand"
 	"net/http"
-	"net/url"
+	//"net/url"
 	"path"
 	"time"
 )
@@ -49,9 +51,9 @@ type Session struct {
 	retryTime  time.Duration
 	params     SessionParams
 	hclient    *http.Client
-	url        *url.URL
-	req        *http.Request
-	resp       *http.Response
+	//url        *url.URL
+	req  *http.Request
+	resp *http.Response
 }
 
 const (
@@ -73,12 +75,33 @@ func NewSession(client *Client, life time.Duration) (session *Session, err error
 		life:       life,
 		retryCount: defaultRetryCount,
 		retryTime:  defaultRetryTime,
-		hclient:    &http.Client{Timeout: defaultRequestTimeout},
+		hclient: &http.Client{
+			Timeout: defaultRequestTimeout,
+		},
 	}
-	session.url = &url.URL{
-		Scheme: "http",
-		Host:   client.config.EndPoint,
+
+	if client.config.ServerCert != "" {
+		roots := x509.NewCertPool()
+		ok := roots.AppendCertsFromPEM([]byte(client.config.ServerCert))
+		if !ok {
+			log.Printf("[Error] Invalid Server Cert\n", err)
+			err = fmt.Errorf("Invalid Server Cert")
+			return
+		}
+
+		session.hclient.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs: roots,
+			},
+		}
 	}
+
+	/*
+		session.url = &url.URL{
+			Scheme: "https",
+			Host:   client.config.EndPoint,
+		}
+	*/
 
 	err = session.Open()
 
@@ -264,6 +287,7 @@ type Config struct {
 	EndPoint    string
 	Protocol    string
 	Root        string
+	Server Cert  string
 }
 
 func (c Config) Url(path string) (url string) {
