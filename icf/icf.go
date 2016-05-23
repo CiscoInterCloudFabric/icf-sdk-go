@@ -287,7 +287,7 @@ type Config struct {
 	EndPoint    string
 	Protocol    string
 	Root        string
-	Server Cert  string
+	ServerCert  string
 }
 
 func (c Config) Url(path string) (url string) {
