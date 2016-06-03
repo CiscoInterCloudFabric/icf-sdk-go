@@ -183,7 +183,9 @@ func (s *Session) Close() (err error) {
 const (
 	StatusInProgress       = "progress"
 	StatusCreateInProgress = "creating"
+	StatusCreateFailed     = "create failed"
 	StatusDeleteInProgress = "deleting"
+	StatusDeleteFailed     = "delete failed"
 	StatusSuccess          = "success"
 	StatusDeleted          = "deleted"
 )
