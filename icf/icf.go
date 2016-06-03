@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
+	"log" //"github.com/docker/machine/libmachine/log"
 	"math/rand"
 	"net/http"
 	"path"
@@ -50,9 +50,8 @@ type Session struct {
 	retryTime  time.Duration
 	params     SessionParams
 	hclient    *http.Client
-	//url        *url.URL
-	req  *http.Request
-	resp *http.Response
+	req        *http.Request
+	resp       *http.Response
 }
 
 const (
@@ -98,13 +97,6 @@ func NewSession(client *Client, life time.Duration) (session *Session, err error
 	} else {
 		log.Printf("[Info] New Session with No Sever Cert\n")
 	}
-
-	/*
-		session.url = &url.URL{
-			Scheme: "https",
-			Host:   client.config.EndPoint,
-		}
-	*/
 
 	err = session.Open()
 
