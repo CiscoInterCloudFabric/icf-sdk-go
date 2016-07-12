@@ -7,7 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log" //"github.com/docker/machine/libmachine/log"
+	"log"
+	//"github.com/docker/machine/libmachine/log"
 	"math/rand"
 	"net/http"
 	"path"
@@ -149,8 +150,8 @@ func (s *Session) Open() (err error) {
 	if err = s.SetRequest(create, "token", data); err != nil {
 		return
 	}
-	if _, _, _, err = s.Do(); err != nil {
-		return
+	if _, _, data, err = s.Do(); err != nil {
+		return fmt.Errorf("%s", string(data))
 	}
 	s.params.Token = s.resp.Header.Get("x_icfb_token")
 	s.params.Cookies = s.resp.Cookies()
@@ -166,8 +167,8 @@ func (s *Session) Close() (err error) {
 	if err = s.SetRequest(create, "logout", data); err != nil {
 		return
 	}
-	if _, _, _, err = s.Do(); err != nil {
-		return
+	if _, _, data, err = s.Do(); err != nil {
+		return fmt.Errorf("%s", string(data))
 	}
 	return
 }
@@ -341,7 +342,6 @@ func instanceRespToValues(resp instanceMsg) (instances []*Instance, err error) {
 
 func (c *Client) do(oper uint, object string, reqData []byte) (rspData []byte, err error) {
 	var sc int
-	var scMsg string
 
 	session, err := NewSession(c, 0)
 	if err != nil {
@@ -355,14 +355,17 @@ func (c *Client) do(oper uint, object string, reqData []byte) (rspData []byte, e
 		session.Close()
 	}()
 	if err = session.SetRequest(oper, object, reqData); err != nil {
+		log.Printf("[Error] Setting Request : Error = (%v)\n", err)
 		return
 	}
 	for i := uint(0); i < (session.retryCount + 1); i++ {
-		if sc, scMsg, rspData, err = session.Do(); err != nil {
+		if sc, _, rspData, err = session.Do(); err != nil {
+			log.Printf("[Error] session.Do : Error = (%v)\n", err)
 			return
 		}
 		if sc == 409 && i != session.retryCount {
 			if err = session.SetRequest(oper, object, reqData); err != nil {
+				log.Printf("[Error] Setting Request : Error = (%v)\n", err)
 				return
 			}
 			rand.Seed(int64(time.Now().Nanosecond()))
@@ -373,7 +376,8 @@ func (c *Client) do(oper uint, object string, reqData []byte) (rspData []byte, e
 		}
 	}
 	if sc >= 300 || sc < 100 {
-		err = fmt.Errorf("%v", scMsg)
+		err = fmt.Errorf("%s", string(rspData))
+		log.Printf("[Error] do() : Error = (%v)\n", err)
 		return
 	}
 	return
@@ -433,6 +437,7 @@ func (c *Client) CreateInstance(instance *Instance) (newInstance *Instance, err 
 	var resp instanceStatusResp
 	var req *instanceNewMsg
 	var rspData, reqData []byte
+	var cerr error
 
 	if req, err = newInstanceMsg(instance); err != nil {
 		return
@@ -440,13 +445,15 @@ func (c *Client) CreateInstance(instance *Instance) (newInstance *Instance, err 
 	if reqData, err = json.Marshal(req); err != nil {
 		return
 	}
-	rspData, err = c.do(create, "instances", reqData)
-	if err != nil {
-		log.Printf("[Error] Creating instance (%v) : Error = (%v)\n",
-			instance, err)
-		return
-	}
+	rspData, cerr = c.do(create, "instances", reqData)
+	log.Printf("[Info] Create instance err (%v) response(%s) \n", cerr, string(rspData))
 	if err = json.Unmarshal(rspData, &resp); err != nil {
+		return nil, fmt.Errorf("%s", string(rspData))
+	}
+	if cerr != nil {
+		log.Printf("[Error] Creating instance (%v) : Error = (%v)\n",
+			instance, string(rspData))
+		err = fmt.Errorf("%v", string(rspData))
 		return
 	}
 	if resp.Success == nil {
